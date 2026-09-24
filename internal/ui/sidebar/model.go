@@ -1139,13 +1139,32 @@ func (m *Model) rebuildFilter() {
 	// Within a section:
 	//   1. Channels with ChannelOrder > 0 come first, sorted ascending
 	//      (from SectionDef "<pattern>:<N>" suffixes; config-mode only).
-	//   2. Channels with ChannelOrder == 0 follow, in input order
-	//      (preserves Slack-provided order in Slack mode, and
-	//      bootstrap-order in config mode without ":N" suffixes).
+	//   2. Channels with ChannelOrder == 0 follow. In Slack mode,
+	//      sections whose type alphaSortedSectionTypes lists sort A–Z
+	//      by display name, matching the official client's "default"
+	//      channel_sort; everything else keeps input order
+	//      (bootstrap-order in config mode without ":N" suffixes).
 	sectionOrder := m.modelOrderedSections(m.filtered)
 	rank := make(map[string]int, len(sectionOrder))
 	for i, name := range sectionOrder {
 		rank[name] = i
+	}
+	// alphaKey[idx] is the folded display name for items in an A–Z
+	// section, "" otherwise. Folded once here rather than per compare.
+	var alphaKey map[int]string
+	if m.useSlackSections() {
+		alphaSections := map[string]bool{}
+		for _, meta := range m.sectionsProvider.OrderedSlackSections() {
+			if alphaSortedSectionTypes[meta.Type] {
+				alphaSections[meta.ID] = true
+			}
+		}
+		alphaKey = make(map[int]string, len(m.filtered))
+		for _, idx := range m.filtered {
+			if alphaSections[m.sectionFor(m.items[idx])] {
+				alphaKey[idx] = text.Fold(m.items[idx].Name)
+			}
+		}
 	}
 	sort.SliceStable(m.filtered, func(a, b int) bool {
 		ia, ib := m.filtered[a], m.filtered[b]
@@ -1164,8 +1183,20 @@ func (m *Model) rebuildFilter() {
 		if oa != ob {
 			return oa < ob
 		}
+		if ka, kb := alphaKey[ia], alphaKey[ib]; ka != kb {
+			return ka < kb
+		}
 		return ia < ib
 	})
+}
+
+// alphaSortedSectionTypes lists the Slack section types the official
+// client renders A–Z under the "default" channel_sort pref. Direct
+// Messages (recency) and Recent Apps are deliberately absent.
+var alphaSortedSectionTypes = map[string]bool{
+	"standard": true,
+	"stars":    true,
+	"channels": true,
 }
 
 // cursorKey captures what the cursor is logically pointing at, in a

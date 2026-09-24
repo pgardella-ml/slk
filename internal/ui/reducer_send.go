@@ -245,6 +245,12 @@ func reduceNewMessage(a *App, m NewMessageMsg) tea.Cmd {
 		}
 		return nil
 	}
+	// Re-sort Direct Messages by recency. Before the self-send skips
+	// below, so your own replies bump the DM too; thread replies don't
+	// move a conversation in the official client.
+	if m.Message.ThreadTS == "" || m.Message.ThreadTS == m.Message.TS || m.Message.Subtype == "thread_broadcast" {
+		a.sidebar.NoteActivity(m.ChannelID)
+	}
 	// Skip the WS echo of our own optimistic add. The corresponding
 	// MessageSentMsg / ThreadReplySentMsg already updated the UI
 	// and scheduled side effects; redoing them here would

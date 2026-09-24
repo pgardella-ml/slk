@@ -220,6 +220,10 @@ func (db *DB) migrate() error {
 		"ALTER TABLE channels ADD COLUMN latest_synced_ts TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := db.addColumnIfMissing("channels", "latest_ts",
+		"ALTER TABLE channels ADD COLUMN latest_ts TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := db.addColumnIfMissing("channels", "has_unread",
 		"ALTER TABLE channels ADD COLUMN has_unread INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err

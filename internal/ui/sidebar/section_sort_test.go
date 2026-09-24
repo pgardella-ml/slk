@@ -1,6 +1,10 @@
 package sidebar
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gammons/slk/internal/core"
+)
 
 func visibleIDs(m *Model) []string {
 	var ids []string
@@ -57,4 +61,42 @@ func TestConfigMode_UnannotatedKeepsInputOrder(t *testing.T) {
 	}
 	m := New(items)
 	assertIDs(t, visibleIDs(&m), []string{"C2", "C1"})
+}
+
+func dmSortFixture() (Model, map[string]core.ReadState) {
+	items := []ChannelItem{
+		{ID: "D1", Name: "alice", Type: "dm"},
+		{ID: "D2", Name: "bob", Type: "dm"},
+		{ID: "D3", Name: "carol", Type: "dm"},
+		{ID: "G1", Name: "dave, erin", Type: "group_dm"},
+	}
+	state := map[string]core.ReadState{
+		"D1": {LastReadTS: "1700000001.000000", LatestTS: "1700000001.000000"},
+		"D2": {LastReadTS: "1700000002.000000", LatestTS: "1700000300.000000"},
+		// No LatestTS yet: falls back to LastReadTS.
+		"D3": {LastReadTS: "1700000150.000000"},
+		"G1": {LastReadTS: "1700000002.000000", LatestTS: "1700000200.000000"},
+	}
+	m := New(items)
+	m.SetReadStateReader(func() map[string]core.ReadState { return state })
+	m.SetSectionsProvider(&fakeProvider{
+		ready:    true,
+		sections: []SectionMeta{{ID: "DMS", Name: "Direct Messages", Type: "direct_messages"}},
+	})
+	return m, state
+}
+
+// Slack's "default" channel_sort renders Direct Messages most recent
+// first.
+func TestSlackMode_DirectMessagesSortByRecency(t *testing.T) {
+	m, _ := dmSortFixture()
+	assertIDs(t, visibleIDs(&m), []string{"D2", "G1", "D3", "D1"})
+}
+
+// A new message in a DM re-sorts the section live.
+func TestSlackMode_NoteActivityResortsDMs(t *testing.T) {
+	m, state := dmSortFixture()
+	state["D1"] = core.ReadState{LastReadTS: "1700000001.000000", LatestTS: "1700000400.000000"}
+	m.NoteActivity("D1")
+	assertIDs(t, visibleIDs(&m), []string{"D1", "D2", "G1", "D3"})
 }

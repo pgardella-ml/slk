@@ -148,6 +148,7 @@ type Unread struct {
 	MentionCount int
 	HasUnread    bool
 	LastRead     string
+	Latest       string
 }
 
 // Threads is client.counts' workspace-wide thread rollup — a

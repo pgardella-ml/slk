@@ -146,6 +146,7 @@ func (r *reconnectSync) refreshUnreadState() {
 			// stale badge until the next boot, matching how
 			// has_unread already behaves on this path.
 			MentionCount: u.MentionCount,
+			LatestTS:     u.Latest,
 		})
 	}
 	if err := r.db.BatchUpdateChannelReadState(updates); err != nil {

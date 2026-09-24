@@ -402,6 +402,7 @@ func connectWorkspace(ctx context.Context, token slackclient.Token, db *cache.DB
 				// from client.counts get mention_count reset to 0 by
 				// ReplaceWorkspaceReadState's workspace-wide reset.
 				MentionCount: u.MentionCount,
+				LatestTS:     u.Latest,
 			})
 		}
 		if err := db.ReplaceWorkspaceReadState(client.TeamID(), updates); err != nil {

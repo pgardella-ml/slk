@@ -1139,30 +1139,36 @@ func (m *Model) rebuildFilter() {
 	// Within a section:
 	//   1. Channels with ChannelOrder > 0 come first, sorted ascending
 	//      (from SectionDef "<pattern>:<N>" suffixes; config-mode only).
-	//   2. Channels with ChannelOrder == 0 follow. In Slack mode,
-	//      sections whose type alphaSortedSectionTypes lists sort A–Z
-	//      by display name, matching the official client's "default"
-	//      channel_sort; everything else keeps input order
-	//      (bootstrap-order in config mode without ":N" suffixes).
+	//   2. Channels with ChannelOrder == 0 follow. In Slack mode this
+	//      matches the official client's "default" channel_sort:
+	//      sections alphaSortedSectionTypes lists sort A–Z by display
+	//      name, and Direct Messages sort most recent first. Everything
+	//      else keeps input order (bootstrap-order in config mode
+	//      without ":N" suffixes).
 	sectionOrder := m.modelOrderedSections(m.filtered)
 	rank := make(map[string]int, len(sectionOrder))
 	for i, name := range sectionOrder {
 		rank[name] = i
 	}
 	// alphaKey[idx] is the folded display name for items in an A–Z
-	// section, "" otherwise. Folded once here rather than per compare.
+	// section; recentKey[idx] is the last-activity time for items in a
+	// Direct Messages section. Computed once here rather than per compare.
 	var alphaKey map[int]string
+	var recentKey map[int]time.Time
 	if m.useSlackSections() {
-		alphaSections := map[string]bool{}
+		sectionType := map[string]string{}
 		for _, meta := range m.sectionsProvider.OrderedSlackSections() {
-			if alphaSortedSectionTypes[meta.Type] {
-				alphaSections[meta.ID] = true
-			}
+			sectionType[meta.ID] = meta.Type
 		}
 		alphaKey = make(map[int]string, len(m.filtered))
+		recentKey = make(map[int]time.Time)
 		for _, idx := range m.filtered {
-			if alphaSections[m.sectionFor(m.items[idx])] {
-				alphaKey[idx] = text.Fold(m.items[idx].Name)
+			item := m.items[idx]
+			switch typ := sectionType[m.sectionFor(item)]; {
+			case alphaSortedSectionTypes[typ]:
+				alphaKey[idx] = text.Fold(item.Name)
+			case typ == "direct_messages":
+				recentKey[idx] = lastActivity(readState[item.ID])
 			}
 		}
 	}
@@ -1186,13 +1192,55 @@ func (m *Model) rebuildFilter() {
 		if ka, kb := alphaKey[ia], alphaKey[ib]; ka != kb {
 			return ka < kb
 		}
+		if ta, tb := recentKey[ia], recentKey[ib]; !ta.Equal(tb) {
+			return ta.After(tb)
+		}
 		return ia < ib
 	})
 }
 
+// lastActivity is when a conversation last saw a message: LatestTS
+// from client.counts / live messages, else LastReadTS as a proxy
+// (reading implies activity at least that recent). Zero when neither
+// is known, which sorts last.
+func lastActivity(s core.ReadState) time.Time {
+	if t, ok := parseSlackTS(s.LatestTS); ok {
+		return t
+	}
+	if t, ok := parseSlackTS(s.LastReadTS); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+// NoteActivity tells the sidebar a message just arrived in channelID,
+// after its read state (LatestTS) was written. Re-sorts when the item
+// sits in a recency-ordered section; a no-op otherwise, so channel
+// traffic costs nothing extra.
+func (m *Model) NoteActivity(channelID string) {
+	if !m.useSlackSections() {
+		return
+	}
+	for _, meta := range m.sectionsProvider.OrderedSlackSections() {
+		if meta.Type != "direct_messages" {
+			continue
+		}
+		for _, item := range m.items {
+			if item.ID == channelID && m.sectionFor(item) == meta.ID {
+				m.rebuildFilter()
+				m.rebuildNavPreserveCursor()
+				m.cacheValid = false
+				m.dirty()
+				return
+			}
+		}
+		return
+	}
+}
+
 // alphaSortedSectionTypes lists the Slack section types the official
 // client renders A–Z under the "default" channel_sort pref. Direct
-// Messages (recency) and Recent Apps are deliberately absent.
+// Messages sort by recency instead; Recent Apps keep input order.
 var alphaSortedSectionTypes = map[string]bool{
 	"standard": true,
 	"stars":    true,

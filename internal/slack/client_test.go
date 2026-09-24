@@ -3368,3 +3368,34 @@ func TestMarkChannel_NonJSONBody_ReturnsError(t *testing.T) {
 		t.Fatal("MarkChannel: want error for non-JSON 200 body, got nil")
 	}
 }
+
+func TestGetUnreadCounts_ParsesLatest(t *testing.T) {
+	const body = `{
+	  "ok": true,
+	  "channels": [{"id":"C1","has_unreads":false,"last_read":"1.0","latest":"10.000100"}],
+	  "mpims": [{"id":"G1","has_unreads":false,"last_read":"2.0","latest":"20.000200"}],
+	  "ims": [{"id":"D1","has_unreads":false,"last_read":"3.0","latest":"30.000300"}],
+	  "threads": {"has_unreads":false}
+	}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	c := newTestClient(srv)
+
+	unreads, _, err := c.GetUnreadCounts()
+	if err != nil {
+		t.Fatalf("GetUnreadCounts: %v", err)
+	}
+	got := map[string]string{}
+	for _, u := range unreads {
+		got[u.ChannelID] = u.Latest
+	}
+	want := map[string]string{"C1": "10.000100", "G1": "20.000200", "D1": "30.000300"}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s Latest = %q, want %q", id, got[id], w)
+		}
+	}
+}

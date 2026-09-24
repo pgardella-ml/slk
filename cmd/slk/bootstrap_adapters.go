@@ -119,6 +119,7 @@ func (a countsAdapter) Counts(_ context.Context) (bootstrap.Counts, error) {
 			MentionCount: u.MentionCount,
 			HasUnread:    u.HasUnread,
 			LastRead:     u.LastRead,
+			Latest:       u.Latest,
 		})
 	}
 	return out, nil

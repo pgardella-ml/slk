@@ -148,6 +148,10 @@ const (
 type ReadState struct {
 	LastReadTS string
 	HasUnread  bool
+	// LatestTS is the ts of the conversation's newest message, from
+	// client.counts and advanced by live messages. The sidebar orders
+	// Direct Messages by it. "" means unknown.
+	LatestTS string
 	// MentionCount is the number of unread direct mentions: an explicit
 	// @user or an @here/@channel/@everyone broadcast. For DMs and group
 	// DMs (Slack's ims and mpims), client.counts is believed to report

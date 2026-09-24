@@ -288,6 +288,15 @@ func (h *rtmEventHandler) OnMessage(channelID, userID, ts, text, threadTS, subty
 	// channel already accounted for. Editing it does not make the
 	// channel unread on Slack.
 	shouldMarkChannel := channelEligible && !isSelfMessage && !edited
+	// Recency for the sidebar's Direct Messages order. Unlike the
+	// unread flag this includes self-sent messages: replying moves a
+	// DM to the top in the official client too. Written before the
+	// NewMessageMsg below so the sidebar re-sort reads it.
+	if h.db != nil && channelEligible && !edited {
+		if err := h.db.AdvanceChannelLatestTS(channelID, ts); err != nil {
+			log.Printf("Warning: failed to advance latest_ts for %s: %v", channelID, err)
+		}
+	}
 	if h.db != nil && shouldMarkChannel {
 		if err := h.db.UpdateChannelReadState(channelID, "", true); err != nil {
 			log.Printf("Warning: failed to set has_unread for %s: %v", channelID, err)
